@@ -43,8 +43,8 @@ package-lock.json
 # Logs
 *.log
 
-# Demo video outputs (rebuild with scripts/)
-demo-video/out/
+# Demo video (entire folder — rebuild locally)
+demo-video/
 *.mp4
 *.webm
 
@@ -57,3 +57,11 @@ __jac_gen__/
 content.md
 help_past_year_repos.txt
 rules_not_to_forget.txt
+
+# Internal / submission docs (keep out of public repo)
+devpost.md
+devpost_story.md
+GITHUB_PUSH.md
+slides.md
+legalchain_architecture.md
+_bootstrap.py

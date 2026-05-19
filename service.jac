@@ -18,6 +18,7 @@ import from agents.report_generator { ReportGeneratorWalker }
 import from agents.graph_export { GraphExportWalker }
 import from security.auth_gate { authenticate_user, verify_token, check_permission }
 import from jac_data.samples { SAMPLES }
+import from tools.legal_tools { sanitize_for_report }
 
 
 node ContractRef {
@@ -207,7 +208,7 @@ walker analyze {
         ui_payload["report_result"] = report_result;
         ui_payload["mesh_result"] = mesh_result;
         ui_payload["runtime"] = "jac-walkers";
-        report ui_payload;
+        report sanitize_for_report(ui_payload);
     }
 }
 

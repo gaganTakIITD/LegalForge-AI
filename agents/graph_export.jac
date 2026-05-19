@@ -20,7 +20,7 @@ walker GraphExportWalker {
             clauses_out.append({
                 "id": ck,
                 "clause_id": c.clause_id,
-                "title": f"§{c.clause_id}" + (f" — {c.section}" if c.section else ""),
+                "title": f"Sec. {c.clause_id}" + (f" - {c.section}" if c.section else ""),
                 "section": c.section,
                 "risk_score": c.risk_score,
                 "risk_level": c.risk_level,
@@ -78,7 +78,7 @@ walker GraphExportWalker {
         for c in all_clauses {
             ck = c.clause_id if c.clause_id else f"clause-{c.text[:20]}";
             nodes.append({
-                "id": ck, "label": f"§{c.clause_id}", "type": "clause",
+                "id": ck, "label": f"Sec. {c.clause_id}", "type": "clause",
                 "risk": c.risk_score, "risk_level": c.risk_level, "flagged": c.flagged
             });
             links.append({"source": contract_key, "target": ck, "type": "contains"});
@@ -103,6 +103,9 @@ walker GraphExportWalker {
             "contract_intent": self.contract_intent,
             "graph_data": {"nodes": nodes, "links": links}
         };
-        report self.payload;
+        # Avoid reporting the full payload: Jac prints reports to stdout and large
+        # payloads crash on Windows (OSError 22) when stdout is not a real console.
+        # Parent walkers read export_w.payload directly.
+        report {"status": "complete", "title": here.title, "clauses": len(clauses_out)};
     }
 }

@@ -104,3 +104,28 @@ def calculate_exposure(clause_text: str, contract_value: float) -> dict {
         "risk_terms_found": risk_count
     };
 }
+
+
+# Windows-safe report helper: strip chars that break console print in jac serve.
+def sanitize_for_report(data: any) -> any {
+    out = data;
+    ::py::
+    import json
+
+    def _fix(v):
+        if isinstance(v, str):
+            s = v.replace("\u00a7", "Sec.").replace("\u2014", "-").replace("\u2013", "-")
+            return s.encode("ascii", "replace").decode("ascii")
+        if isinstance(v, dict):
+            return {str(k): _fix(val) for k, val in v.items()}
+        if isinstance(v, list):
+            return [_fix(i) for i in v]
+        return v
+
+    try:
+        out = _fix(data)
+    except Exception:
+        out = data
+    ::py::
+    return out;
+}
