@@ -5,31 +5,12 @@ import from graph.nodes {
     contains, defines, involves
 }
 import from tools.legal_tools { get_timestamp }
-import from byllm.lib { Model }
 
-glob llm = Model(model_name="gemini/gemini-pro-latest");
 walker ParserAgent {
     """Decomposes raw contract text into a semantic clause graph."""
     has contract_text: str = "";
     has contract_title: str = "Untitled Contract";
     has result: dict = {};
-    # All LLM methods return a JSON string; we parse it inside the walker
-    # because byllm 0.4 requires fully-typed schemas which legal data resists.
-    def parse_into_clauses(text: str) -> str
-        by llm(
-            incl_info=(self.contract_title,),
-            reason="Split this legal contract into individual clauses. Return a JSON array string. Each element MUST have keys: clause_id (string like '1.1'), text (full clause text), section (section name), page_number (int), clause_type (one of: obligation, right, definition, condition, remedy). Return ONLY the JSON array, no prose."
-        );
-
-    def extract_definitions(text: str) -> str
-        by llm(
-            reason="Extract all defined terms and their meanings from this contract. Return ONLY a JSON array of objects with keys: term, meaning, scope (global or section-specific). No prose."
-        );
-
-    def identify_parties(text: str) -> str
-        by llm(
-            reason="Identify all parties in this contract. Return ONLY a JSON array of objects with keys: name, role (buyer, seller, licensor, licensee, guarantor, service_provider, or client), obligations (array of strings), rights (array of strings). No prose."
-        );
 
     can build_graph with `root entry {
         contract_node = Contract(
@@ -48,12 +29,14 @@ walker ParserAgent {
         text = (self.contract_text or "").strip()
         rows = []
         if text:
-            parts = re.split(r"\n(?=\d+(?:\.\d+)?\s)", text)
+            # Major sections only (5. REMEDIES), not sub-clauses (5.2), so graph
+            # nodes align with contradiction findings (§5 vs §6).
+            parts = re.split(r"\n(?=\d+\.\s+[A-Z])", text)
             for i, part in enumerate(parts):
                 part = part.strip()
                 if not part:
                     continue
-                m = re.match(r"^(\d+(?:\.\d+)?)\s*(.*)$", part, re.S)
+                m = re.match(r"^(\d+)\.\s*(.*)$", part, re.S)
                 if m:
                     cid = m.group(1)
                     rest = (m.group(2) or "").strip()

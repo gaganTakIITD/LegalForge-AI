@@ -8,7 +8,7 @@ glob FOUNDATIONAL_KINDS = {
 def classify_clause(text: str, section: str) -> str {
     combined = (section + "\n" + text).lower();
     head = section.lower();
-    if "limitation of liability" in head or "liability cap" in head {
+    if "limitation of liability" in head or "liability cap" in head or "remedies" in head {
         return "liability";
     }
     if "indemnif" in head {
@@ -18,6 +18,9 @@ def classify_clause(text: str, section: str) -> str {
         return "non_compete";
     }
     if "data process" in head or "privacy" in head or "gdpr" in head {
+        return "data_processing";
+    }
+    if "data ownership" in head or "user data" in head {
         return "data_processing";
     }
     if "auto-renew" in head or "renewal" in head {

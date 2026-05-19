@@ -1,9 +1,5 @@
-// LegalForge AI -- API client
-//
-// Talks to the Jac Cloud runtime exposed by `jac serve service.jac`
-// (every walker becomes POST /walker/<walker_name>, response is
-// {status, reports: [...]}). In dev, Vite proxies /walker/* to
-// http://localhost:8000 (see vite.config.js).
+// LegalForge AI — Jac Cloud runtime (`jac serve service.jac`)
+// Walkers: POST /walker/<name> → { status, reports: [...] }
 
 const API = ''
 
@@ -16,11 +12,17 @@ async function safeJson(r, fallback) {
   }
 }
 
-// jac-cloud wraps every walker `report` in {status, reports: [...]}.
-// Spawned sub-walkers append reports too; prefer the final GraphExport payload.
 function unwrap(d) {
   if (!d || !Array.isArray(d.reports) || d.reports.length === 0) return d
   const reports = d.reports
+  const rich = reports.filter(
+    (r) =>
+      r &&
+      (r.contradiction_result ||
+        r.graph_data ||
+        (Array.isArray(r.clauses) && Array.isArray(r.contradictions))),
+  )
+  if (rich.length > 0) return rich[rich.length - 1]
   const complete = reports.filter((r) => r && r.status === 'complete')
   if (complete.length > 0) return complete[complete.length - 1]
   const withClauses = reports.filter((r) => r && Array.isArray(r.clauses))
@@ -64,21 +66,24 @@ export async function fetchSample(id, token) {
 }
 
 export async function analyze(payload, token) {
-  const body = { ...payload, token }
+  const controller = new AbortController()
+  const tid = setTimeout(() => controller.abort(), 300000)
   const r = await fetch(`${API}/walker/analyze`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${token}`,
     },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...payload, token }),
+    signal: controller.signal,
   })
+  clearTimeout(tid)
   const d = await safeJson(
     r,
-    'Analysis failed -- check Jac server logs and restart `jac serve service.jac`.',
+    'Analysis failed — run `jac serve service.jac` on port 8000.',
   )
   if (!r.ok) {
-    const hint = r.status === 500 ? ' (see backend terminal for stack trace)' : ''
+    const hint = r.status === 500 ? ' (see jac serve terminal for stack trace)' : ''
     throw new Error((explainErr(d, `HTTP ${r.status}`)) + hint)
   }
   return unwrap(d)

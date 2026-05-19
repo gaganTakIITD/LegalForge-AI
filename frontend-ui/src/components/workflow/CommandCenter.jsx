@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { motion } from 'framer-motion'
 import { RefreshCw, Download } from 'lucide-react'
 import ForceGraph from '../ForceGraph'
@@ -17,6 +17,22 @@ export default function CommandCenter({ results, onRestart, caseId, timeSavedMin
   const [graphFocus, setGraphFocus] = useState(null)
 
   const story = useMemo(() => buildStory(results), [results])
+
+  useEffect(() => {
+    const firstContra = (results?.contradictions || [])[0]
+    if (!firstContra?.clause_a_id) return
+    setActiveIssue({
+      type: 'contradiction',
+      id: `${firstContra.clause_a}-${firstContra.clause_b}`,
+      title: `§${firstContra.clause_a} ↔ §${firstContra.clause_b}`,
+      body: firstContra.description,
+      severity: firstContra.severity,
+      clauseAId: firstContra.clause_a_id,
+      clauseBId: firstContra.clause_b_id,
+    })
+    setGraphFocus({ a: firstContra.clause_a_id, b: firstContra.clause_b_id })
+    setSelectedClause(firstContra.clause_a_id)
+  }, [results])
 
   const handleIssue = (issue) => {
     setActiveIssue(issue)

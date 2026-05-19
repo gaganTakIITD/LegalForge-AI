@@ -13,7 +13,18 @@ def has_uncapped_indemnity(text: str) -> bool {
     if "indemnif" not in t {
         return False;
     }
-    return "no cap" in t or "without limit" in t or "uncapped" in t or "unlimited" in t;
+    if "no cap" in t or "without limit" in t or "uncapped" in t or "unlimited" in t {
+        return True;
+    }
+    return ("all losses" in t or "indefinitely" in t) and "cap" not in t;
+}
+
+def has_indemnity_cap(text: str) -> bool {
+    t = text.lower();
+    if "indemnif" not in t {
+        return False;
+    }
+    return "cap" in t or "limited to" in t or "total purchase price" in t;
 }
 
 def detect_liability_indemnity_conflict(text_a: str, kind_a: str, text_b: str, kind_b: str) -> dict {
@@ -78,8 +89,83 @@ def detect_ownership_conflict(text_a: str, text_b: str) -> dict {
     return {};
 }
 
+def detect_indemnity_cap_conflict(text_a: str, kind_a: str, text_b: str, kind_b: str) -> dict {
+    broad = "";
+    capped = "";
+    if kind_a == "indemnification" and kind_b == "indemnification" {
+        if has_broad_indemnity(text_a) and has_indemnity_cap(text_b) {
+            broad = text_a;
+            capped = text_b;
+        } elif has_broad_indemnity(text_b) and has_indemnity_cap(text_a) {
+            broad = text_b;
+            capped = text_a;
+        }
+    }
+    if not broad or not capped {
+        return {};
+    }
+    return {
+        "contradicts": True,
+        "severity": "direct",
+        "explanation": "Broad indemnification for all losses conflicts with a separate indemnification cap.",
+        "confidence": 0.92,
+        "rule": "indemnity_cap_internal_conflict"
+    };
+}
+
+def has_broad_indemnity(text: str) -> bool {
+    t = text.lower();
+    if "indemnif" not in t {
+        return False;
+    }
+    if has_indemnity_cap(text) {
+        return False;
+    }
+    return "all losses" in t or "indefinitely" in t or has_uncapped_indemnity(text);
+}
+
+def detect_termination_noncompete_conflict(text_a: str, kind_a: str, text_b: str, kind_b: str) -> dict {
+    term_text = "";
+    nc_text = "";
+    if kind_a == "termination" and kind_b == "non_compete" {
+        term_text = text_a;
+        nc_text = text_b;
+    } elif kind_b == "termination" and kind_a == "non_compete" {
+        term_text = text_b;
+        nc_text = text_a;
+    } else {
+        return {};
+    }
+    t = term_text.lower();
+    if "terminat" not in t {
+        return {};
+    }
+    n = nc_text.lower();
+    if "non-compete" not in n and "noncompete" not in n and "non compete" not in n {
+        return {};
+    }
+    if "without severance" in t or "at-will" in t or "at will" in t or "immediately" in t {
+        return {
+            "contradicts": True,
+            "severity": "direct",
+            "explanation": "At-will termination right pulls against a long-tail non-compete obligation.",
+            "confidence": 0.90,
+            "rule": "termination_vs_noncompete"
+        };
+    }
+    return {};
+}
+
 def adjudicate_structural_pair(text_a: str, kind_a: str, text_b: str, kind_b: str) -> dict {
     r = detect_ownership_conflict(text_a, text_b);
+    if r {
+        return r;
+    }
+    r = detect_termination_noncompete_conflict(text_a, kind_a, text_b, kind_b);
+    if r {
+        return r;
+    }
+    r = detect_indemnity_cap_conflict(text_a, kind_a, text_b, kind_b);
     if r {
         return r;
     }

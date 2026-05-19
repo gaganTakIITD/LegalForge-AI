@@ -1,41 +1,58 @@
-"""Agent 3: Compliance Walker -- kind-mapped statutes + graph-wide structural checks."""
+"""Agent 3: Compliance Walker -- deterministic statute checks."""
 
 import from graph.nodes { Contract, Clause, governed_by }
 import from tools.clause_classifier { FOUNDATIONAL_KINDS }
 import from tools.structural_rules { has_liability_cap, has_uncapped_indemnity }
-import from byllm.lib { Model }
 
-glob llm = Model(model_name="gemini/gemini-pro-latest");
-glob STATUTE_MAP_US = {
-    "liability":       ["UCC §2-302"],
-    "indemnification": ["UCC §2-302"],
-    "data_processing": ["GDPR Art. 28", "CCPA 1798.100"],
-    "non_compete":     ["FTC Non-Compete Rule"],
-    "renewal":         ["FTC Act §5"],
-    "warranty":        ["UCC §2-316"],
-    "termination":     ["FTC Act §5"]
-};
 walker ComplianceWalker {
     has jurisdiction: str = "US";
     has violations: list = [];
-
-    def check_clause_against_statute(clause_text: str, clause_kind: str, statute: str) -> str
-        by llm(
-            reason=(
-                "Strict compliance check: violation=true only when operative language "
-                "conflicts with the statute. 'restrict access' is NOT a non-compete. "
-                "Return ONLY JSON: {violation: bool, statute: string, violation_detail: string, "
-                "severity: critical|high|medium|low, suggested_fix: string, confidence: 0.0-1.0}."
-            )
-        );
 
     def _privacy_leak(text: str) -> bool {
         t = text.lower();
         return ("sell" in t or "share" in t) and "personal data" in t and "without" in t and "consent" in t;
     }
 
+    def _non_compete_overreach(text: str) -> bool {
+        t = text.lower();
+        return ("non-compete" in t or "noncompete" in t or "non compete" in t)
+            and ("global" in t or "seven year" in t or "5 year" in t or "five year" in t);
+    }
+
+    def _check_gdpr_data_traps(all_clauses: list) -> bool {
+        gdpr_clause = None;
+        analytics_clause = None;
+        for c in all_clauses {
+            t = c.text.lower();
+            if "gdpr" in t or "ccpa" in t {
+                gdpr_clause = c;
+            }
+            if "user data" in t and ("analytic" in t or "anonymized" in t or "anonymised" in t) {
+                analytics_clause = c;
+            }
+        }
+        if gdpr_clause and analytics_clause {
+            gdpr_clause.flagged = True;
+            analytics_clause.flagged = True;
+            self.violations.append({
+                "clause_id": gdpr_clause.clause_id,
+                "clause_kind": "data_processing",
+                "statute": "GDPR Art. 28 / CCPA 1798.100",
+                "detail": (
+                    "GDPR/CCPA compliance claim conflicts with broad analytics use of User Data "
+                    "without subprocessors, lawful basis, or consent flow."
+                ),
+                "severity": "high",
+                "confidence": 0.91
+            });
+            return True;
+        }
+        return False;
+    }
+
     can start with Contract entry {
         all_clauses = [-->(`?Clause)];
+        self._check_gdpr_data_traps(all_clauses);
         cap_clause = None;
         ind_clause = None;
         for c in all_clauses {
@@ -46,68 +63,73 @@ walker ComplianceWalker {
             self.violations.append({
                 "clause_id": ind_clause.clause_id,
                 "clause_kind": "indemnification",
-                "statute": "UCC §2-302",
+                "statute": "UCC Sec. 2-302",
                 "detail": (
-                    f"Uncapped indemnity at §{ind_clause.clause_id} vs cap at §{cap_clause.clause_id}."
+                    f"Uncapped indemnity at Sec. {ind_clause.clause_id} vs cap at Sec. {cap_clause.clause_id}."
                 ),
                 "severity": "high",
                 "confidence": 0.93
             });
             ind_clause.flagged = True;
+            cap_clause.flagged = True;
             ind_clause +>:governed_by:+> cap_clause;
         }
-        visit [-->];
-    }
-
-    can inspect with Clause entry {
-        if here.clause_kind in FOUNDATIONAL_KINDS {
-            visit [-->];
-            return;
-        }
-        if self._privacy_leak(here.text) {
-            here.flagged = True;
-            self.violations.append({
-                "clause_id": here.clause_id,
-                "clause_kind": here.clause_kind or "data_processing",
-                "statute": "GDPR Art. 6 / CCPA 1798.120",
-                "detail": "Blatant personal-data sale without consent.",
-                "severity": "critical",
-                "confidence": 0.95
-            });
-            visit [-->];
-            return;
-        }
-
-        candidates = STATUTE_MAP_US.get(here.clause_kind, []);
-        for statute in candidates {
-            result = {};
-            llm_raw = self.check_clause_against_statute(here.text, here.clause_kind, statute);
-            ::py::
-            import json, re
-            s = llm_raw if isinstance(llm_raw, str) else ""
-            m = re.search(r"\{.*\}", s, re.DOTALL)
-            try:
-                result = json.loads(m.group(0)) if m else {}
-            except Exception:
-                result = {}
-            ::py::
-            if isinstance(result, dict) and result.get("violation", False) {
-                here.flagged = True;
+        for c in all_clauses {
+            if c.clause_kind in FOUNDATIONAL_KINDS { continue; }
+            if self._privacy_leak(c.text) {
+                c.flagged = True;
                 self.violations.append({
-                    "clause_id": here.clause_id,
-                    "clause_kind": here.clause_kind,
-                    "statute": result.get("statute", statute),
-                    "detail": result.get("violation_detail", ""),
-                    "severity": result.get("severity", "medium"),
-                    "confidence": result.get("confidence", 0.8)
+                    "clause_id": c.clause_id,
+                    "clause_kind": c.clause_kind or "data_processing",
+                    "statute": "GDPR Art. 6 / CCPA 1798.120",
+                    "detail": "Personal-data sale or share without consent.",
+                    "severity": "critical",
+                    "confidence": 0.95
                 });
-                break;
+                continue;
+            }
+            if c.clause_kind == "liability" and has_liability_cap(c.text) {
+                c.flagged = True;
+                self.violations.append({
+                    "clause_id": c.clause_id,
+                    "clause_kind": "liability",
+                    "statute": "UCC Sec. 2-302",
+                    "detail": "Liability cap may be unconscionable relative to uncapped indemnity elsewhere.",
+                    "severity": "high",
+                    "confidence": 0.88
+                });
+            } elif c.clause_kind == "indemnification" and has_uncapped_indemnity(c.text) {
+                c.flagged = True;
+                self.violations.append({
+                    "clause_id": c.clause_id,
+                    "clause_kind": "indemnification",
+                    "statute": "UCC Sec. 2-302",
+                    "detail": "Uncapped indemnification scope appears unconscionable.",
+                    "severity": "high",
+                    "confidence": 0.90
+                });
+            } elif c.clause_kind == "non_compete" and self._non_compete_overreach(c.text) {
+                c.flagged = True;
+                self.violations.append({
+                    "clause_id": c.clause_id,
+                    "clause_kind": "non_compete",
+                    "statute": "FTC Non-Compete Rule",
+                    "detail": "Restrictive covenant scope may exceed enforceability under FTC guidance.",
+                    "severity": "high",
+                    "confidence": 0.91
+                });
+            } elif c.clause_kind == "data_processing" and ("gdpr" in c.text.lower() or "ccpa" in c.text.lower()) {
+                c.flagged = True;
+                self.violations.append({
+                    "clause_id": c.clause_id,
+                    "clause_kind": "data_processing",
+                    "statute": "GDPR Art. 28",
+                    "detail": "Data-processing terms require subprocessors, retention limits, and lawful basis for personal data.",
+                    "severity": "high",
+                    "confidence": 0.85
+                });
             }
         }
-        visit [-->];
-    }
-
-    can summarize with Contract exit {
         report {
             "agent": "ComplianceWalker",
             "jurisdiction": self.jurisdiction,

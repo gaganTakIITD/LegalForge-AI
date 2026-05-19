@@ -1,10 +1,5 @@
 """
 LegalForge AI - Jac Cloud Service (native walker runtime)
-
-`jac serve service.jac` exposes walkers as REST endpoints.
-Contract analysis runs through Jac OSP walkers in agents/*.jac —
-graph nodes, edges (contains, references, modifies, contradicts, governed_by),
-and `by llm()` abilities.
 """
 
 import from graph.nodes { Contract }
@@ -14,7 +9,6 @@ import from agents.contradiction { ContradictionWalker }
 import from agents.compliance { ComplianceWalker }
 import from agents.risk_scorer { RiskScorerWalker }
 import from agents.negotiation { NegotiationWalker }
-import from agents.report_generator { ReportGeneratorWalker }
 import from agents.graph_export { GraphExportWalker }
 import from security.auth_gate { authenticate_user, verify_token, check_permission }
 import from jac_data.samples { SAMPLES }
@@ -59,8 +53,7 @@ walker list_samples {
                 "length": len(sample.get("text", ""))
             });
         }
-        out = {"samples": items};
-        report out;
+        report {"samples": items};
     }
 }
 
@@ -95,7 +88,6 @@ walker analyze {
         ref = ContractRef(title=self.title);
         here ++> ref;
 
-        # Optional JWT gate (infrastructure only — not agent logic).
         if self.token {
             user = verify_token(self.token);
             auth_ok = user.get("valid", False) and check_permission(user.get("role", ""), "analyze");
@@ -105,75 +97,35 @@ walker analyze {
             }
         }
 
-        # ── Jac walker pipeline (graph-native) ───────────────────────
         parse_w = here spawn ParserAgent(
             contract_text=self.contract_text,
             contract_title=self.title
         );
         parse_result = parse_w.result if parse_w.result else {};
 
-        # Parser attaches Contract as child of root; filter to that type only.
         contract_kids = [-->(`?Contract)];
         if not contract_kids {
-            report {"error": "Failed to parse contract", "parse": parse_result};
+            report {"error": "Failed to parse contract", "parse": parse_result, "status": "error"};
             disengage;
         }
         contract_node = contract_kids[-1];
         contract_node.jurisdiction = self.jurisdiction;
 
-        mesh_result = contract_node spawn MeshEnrichmentWalker();
-        # Submission-safe deterministic mode: avoid hard failure when LLM quota is exhausted.
-        contradiction_result = {
-            "agent": "ContradictionWalker",
-            "comparisons": 0,
-            "structural_hits": 0,
-            "contradictions_found": 0,
-            "findings": []
-        };
-        compliance_result = {
-            "agent": "ComplianceWalker",
-            "jurisdiction": self.jurisdiction,
-            "violations_found": 0,
-            "violations": []
-        };
-        risk_result = {
-            "overall_risk": contract_node.risk_score,
-            "clauses_analyzed": parse_result.get("clauses", 0),
-            "clause_scores": []
-        };
-        negotiation_result = {"agent": "NegotiationWalker", "proposals_generated": 0, "proposals": []};
+        mesh_w = contract_node spawn MeshEnrichmentWalker();
+        contra_w = contract_node spawn ContradictionWalker();
+        compliance_w = contract_node spawn ComplianceWalker(jurisdiction=self.jurisdiction);
+        risk_w = contract_node spawn RiskScorerWalker();
+        nego_w = contract_node spawn NegotiationWalker(party_perspective=self.party_perspective);
 
-        contra_findings = [];
-        viols = [];
-        props = [];
-        if isinstance(contradiction_result, dict) {
-            contra_findings = contradiction_result.get("findings", []);
-        }
-        if isinstance(compliance_result, dict) {
-            viols = compliance_result.get("violations", []);
-        }
-        if isinstance(negotiation_result, dict) {
-            props = negotiation_result.get("proposals", []);
-        }
+        contra_findings = contra_w.findings;
+        viols = compliance_w.violations;
+        props = nego_w.proposals;
 
-        report_result = {
-            "executive_summary":
-                f"Executive Summary: {self.title}\n\n"
-                f"Parsed {parse_result.get('clauses', 0)} clauses using Jac deterministic parsing. "
-                "LLM-heavy passes are skipped in this runtime mode to ensure demo stability.",
-            "risk_score": contract_node.risk_score,
-            "contract_title": self.title,
-            "total_clauses": parse_result.get("clauses", 0),
-            "flagged_clauses": 0,
-            "contradictions": [],
-            "violations": [],
-            "proposals": [],
-            "audit_trail_count": 0
-        };
-
-        report_text = "";
-        if isinstance(report_result, dict) {
-            report_text = report_result.get("executive_summary", "");
+        flagged_count = 0;
+        for cs in risk_w.clause_scores {
+            if isinstance(cs, dict) and cs.get("risk_level", "") in ["high", "critical"] {
+                flagged_count += 1;
+            }
         }
 
         ref.contract_id = contract_node.title;
@@ -183,9 +135,13 @@ walker analyze {
             contradictions=contra_findings,
             violations=viols,
             proposals=props,
-            report_text=report_text,
+            report_text=(
+                f"Analyzed {parse_result.get('clauses', 0)} clauses. "
+                f"Found {len(contra_findings)} contradiction(s), {len(viols)} violation(s), "
+                f"{len(props)} proposal(s). Risk: {contract_node.risk_score}."
+            ),
             contract_intent={
-                "deal_thesis": f"Analysis of {self.title} from {self.party_perspective} perspective.",
+                "deal_thesis": f"Analysis of {self.title}",
                 "jurisdiction": self.jurisdiction,
                 "party_perspective": self.party_perspective,
                 "document_type": "GENERIC"
@@ -194,20 +150,57 @@ walker analyze {
 
         ui_payload = export_w.payload if export_w.payload else {};
         if not ui_payload {
-            ui_payload = {
-                "status": "error",
-                "error": "Graph export produced no payload",
-                "title": self.title
-            };
+            ui_payload = {"status": "error", "error": "No payload", "title": self.title};
         }
         ui_payload["parse_result"] = parse_result;
-        ui_payload["contradiction_result"] = contradiction_result;
-        ui_payload["compliance_result"] = compliance_result;
-        ui_payload["risk_result"] = risk_result;
-        ui_payload["negotiation_result"] = negotiation_result;
-        ui_payload["report_result"] = report_result;
-        ui_payload["mesh_result"] = mesh_result;
+        ui_payload["contradiction_result"] = {
+            "agent": "ContradictionWalker",
+            "comparisons": contra_w.comparisons,
+            "structural_hits": contra_w.structural_hits,
+            "contradictions_found": len(contra_findings),
+            "findings": contra_findings
+        };
+        ui_payload["compliance_result"] = {
+            "agent": "ComplianceWalker",
+            "jurisdiction": self.jurisdiction,
+            "violations_found": len(viols),
+            "violations": viols
+        };
+        ui_payload["risk_result"] = {
+            "overall_risk": contract_node.risk_score,
+            "clauses_analyzed": risk_w.clause_count,
+            "clause_scores": risk_w.clause_scores
+        };
+        ui_payload["negotiation_result"] = {
+            "agent": "NegotiationWalker",
+            "proposals_generated": len(props),
+            "proposals": props
+        };
+        ui_payload["report_result"] = {
+            "executive_summary": (
+                f"Executive Summary: {self.title}\n"
+                f"Analyzed {parse_result.get('clauses', 0)} clauses. "
+                f"Found {len(contra_findings)} contradiction(s), {len(viols)} violation(s), "
+                f"{len(props)} proposal(s). Risk score: {contract_node.risk_score}. "
+                f"{flagged_count} high/critical clauses."
+            ),
+            "risk_score": contract_node.risk_score,
+            "contract_title": self.title,
+            "total_clauses": parse_result.get("clauses", 0),
+            "flagged_clauses": flagged_count,
+            "contradictions": contra_findings,
+            "violations": viols,
+            "proposals": props,
+            "audit_trail_count": 0
+        };
+        ui_payload["mesh_result"] = {
+            "agent": "MeshEnrichmentWalker",
+            "reference_edges": mesh_w.reference_edges,
+            "modifies_edges": mesh_w.modifies_edges
+        };
         ui_payload["runtime"] = "jac-walkers";
+        ui_payload["demo_mode"] = False;
+        ui_payload["status"] = "complete";
         report sanitize_for_report(ui_payload);
     }
 }
@@ -233,6 +226,24 @@ walker health {
 
 
 with entry {
+    ::py::
+    import os
+    from pathlib import Path
+    try:
+        from dotenv import load_dotenv
+        root_env = Path(__file__).parent / ".env"
+        backend_env = Path(__file__).parent / "backend" / ".env"
+        if root_env.exists():
+            load_dotenv(root_env, override=True)
+        elif backend_env.exists():
+            load_dotenv(backend_env, override=True)
+        _key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or os.getenv("OPENAI_API_KEY", "")
+        if _key:
+            os.environ.setdefault("GEMINI_API_KEY", _key)
+            os.environ.setdefault("GOOGLE_API_KEY", _key)
+    except ImportError:
+        pass
+    ::py::
     print("LegalForge AI -- Jac native walker runtime (service.jac)");
     print("Run:  jac serve service.jac");
 }

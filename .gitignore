@@ -58,6 +58,14 @@ content.md
 help_past_year_repos.txt
 rules_not_to_forget.txt
 
+# Local-only helpers (not part of Jac runtime)
+start-python.ps1
+demo_server.py
+start-demo.ps1
+demo/
+scripts/create-submission-zip.ps1
+LegalForge-JacHACS-submission-*.zip
+
 # Internal / submission docs (keep out of public repo)
 devpost.md
 devpost_story.md

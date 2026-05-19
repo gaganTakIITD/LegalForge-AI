@@ -6,8 +6,10 @@ export default defineConfig({
   server: {
     port: 3000,
     proxy: {
-      '/walker': 'http://localhost:8000',
-      '/api': 'http://localhost:8000'
+      '/walker': {
+        target: 'http://localhost:8000',
+        timeout: 300000,
+      },
     }
   }
 })

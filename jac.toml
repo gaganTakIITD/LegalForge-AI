@@ -13,7 +13,7 @@ system_prompt = "You are LegalForge AI, a precise legal analysis agent. You anal
 [plugins.byllm.model]
 # Gemini via litellm (byllm uses litellm under the hood).
 # Falls back to OPENAI_API_KEY env if a real Google key is not present.
-default_model = "gemini/gemini-2.0-flash"
+default_model = "gemini/gemini-2.5-flash"
 verbose = false
 
 [plugins.byllm.call_params]
@@ -22,8 +22,8 @@ max_tokens = 4096
 
 [plugins.byllm.fallback]
 strategy = "fallback"
-num_retries = 2
-timeout = 120.0
+num_retries = 0
+timeout = 10.0
 
 [serve]
 port = 8000

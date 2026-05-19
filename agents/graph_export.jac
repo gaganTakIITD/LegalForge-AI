@@ -11,6 +11,16 @@ walker GraphExportWalker {
     has contract_intent: dict = {};
     has payload: dict = {};
 
+    def clause_label(c: Clause) -> str {
+        cid = c.clause_id if c.clause_id else "?";
+        sec = (c.section or "").strip();
+        if sec {
+            short = sec if len(sec) <= 28 else sec[:26] + "…";
+            return f"§{cid} {short}";
+        }
+        return f"§{cid}";
+    }
+
     can export with Contract entry {
         all_clauses = [-->(`?Clause)];
         contract_key = here.title if here.title else "contract";
@@ -78,7 +88,7 @@ walker GraphExportWalker {
         for c in all_clauses {
             ck = c.clause_id if c.clause_id else f"clause-{c.text[:20]}";
             nodes.append({
-                "id": ck, "label": f"Sec. {c.clause_id}", "type": "clause",
+                "id": ck, "label": self.clause_label(c), "type": "clause",
                 "risk": c.risk_score, "risk_level": c.risk_level, "flagged": c.flagged
             });
             links.append({"source": contract_key, "target": ck, "type": "contains"});

@@ -52,10 +52,10 @@ Open <http://localhost:3000> — login `analyst` / `analyst123`.
   `ContradictionWalker` → `ComplianceWalker` → `RiskScorerWalker` →
   `NegotiationWalker` → `ReportGeneratorWalker` → `GraphExportWalker`.
 - **Structural rules** live in `tools/structural_rules.jac` (liability cap vs
-  uncapped indemnity, ownership conflicts) — not Python mirrors.
-- **Jac-native auth + sample contracts** now run inside Jac modules
-  (`security/auth_gate.jac`, `jac_data/samples.jac`) with no Python bridge.
-- Runtime path is fully Jac (`service.jac` + `agents/*.jac` + `tools/*.jac`).
+  uncapped indemnity, ownership conflicts).
+- **Jac-native auth + sample contracts** in `security/auth_gate.jac` and
+  `jac_data/samples.jac`.
+- **No Python agent mirror** — `backend/` holds only optional API keys (`.env`).
 
 ---
 
@@ -74,10 +74,8 @@ This:
 
 ### 2. Start the Jac Cloud backend  (terminal 1)
 ```powershell
-$env:PYTHONPATH = "$pwd"
-.\.venv-jac\Scripts\jac.exe serve service.jac
+.\start-jac.ps1
 ```
-Output: `Uvicorn running on http://0.0.0.0:8000`. Interactive docs at <http://localhost:8000/docs>.
 
 ### 3. Start the UI                (terminal 2)
 ```powershell

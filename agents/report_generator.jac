@@ -4,7 +4,7 @@ import from graph.nodes { Contract, Clause, AuditEntry }
 import from tools.legal_tools { get_timestamp }
 import from byllm.lib { Model }
 
-glob llm = Model(model_name="gemini/gemini-pro-latest");
+glob llm = Model(model_name="gemini/gemini-2.5-flash");
 walker ReportGeneratorWalker {
     """Final walker that collects all findings and generates the audit report."""
     has contradictions: list = [];

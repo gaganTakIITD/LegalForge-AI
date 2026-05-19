@@ -58,8 +58,7 @@ Write-Host "================================================" -ForegroundColor C
 Write-Host "  Setup complete." -ForegroundColor Green
 Write-Host ""
 Write-Host "  Start the Jac Cloud backend (terminal 1):" -ForegroundColor White
-Write-Host "    `$env:PYTHONPATH = '`$pwd'" -ForegroundColor Gray
-Write-Host "    .\.venv-jac\Scripts\jac.exe serve service.jac" -ForegroundColor Gray
+Write-Host "    .\start-jac.ps1" -ForegroundColor Gray
 Write-Host ""
 Write-Host "  Start the React UI (terminal 2):" -ForegroundColor White
 Write-Host "    cd frontend-ui; npm run dev" -ForegroundColor Gray
