@@ -11,7 +11,7 @@ Built for **JacHacks Spring 2026** (May 15-19, virtual). Track: **Agentic AI**.
 ## Clone & run locally
 
 ```powershell
-git clone https://github.com/YOUR_USERNAME/LegalForge-AI.git
+git clone https://github.com/<your-github-username>/LegalForge-AI.git
 cd LegalForge-AI
 .\install.ps1
 # Optional: copy backend\.env.example → backend\.env and add a Gemini/OpenAI key for full LLM mode
