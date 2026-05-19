@@ -1,0 +1,43 @@
+[project]
+name = "legalforge-ai"
+version = "1.1.0"
+description = "Multi-Agent Contract Intelligence Platform -- 6 walker-agents serve via Jac Cloud"
+authors = []
+# Live runtime: Jac walkers in agents/*.jac (OSP graph + by llm()).
+# service.jac is the file you `jac serve`.
+entry-point = "service.jac"
+
+[plugins.byllm]
+system_prompt = "You are LegalForge AI, a precise legal analysis agent. You analyze contracts with surgical accuracy: identifying contradictions, compliance violations, risk factors, and negotiation opportunities. Be concise, cite specific clause numbers, and always provide actionable recommendations."
+
+[plugins.byllm.model]
+# Gemini via litellm (byllm uses litellm under the hood).
+# Falls back to OPENAI_API_KEY env if a real Google key is not present.
+default_model = "gemini/gemini-2.0-flash"
+verbose = false
+
+[plugins.byllm.call_params]
+temperature = 0.3
+max_tokens = 4096
+
+[plugins.byllm.fallback]
+strategy = "fallback"
+num_retries = 2
+timeout = 120.0
+
+[serve]
+port = 8000
+host = "0.0.0.0"
+
+[dependencies]
+openai = ">=1.51.0"
+python-dotenv = ">=1.0.0"
+fastapi = ">=0.115.0"
+uvicorn = ">=0.30.0"
+python-jose = ">=3.3.0"
+passlib = ">=1.7.4"
+cryptography = ">=43.0.0"
+aiofiles = ">=24.1.0"
+
+[test]
+directory = "tests"

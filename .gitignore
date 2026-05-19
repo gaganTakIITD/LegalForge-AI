@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+venv/
+.venv/
+.venv-jac/
+
+# Jac
+.jac_mypy_cache/
+.jaclang/
+__jac_gen__/
+*.jac.pyc
+*.jir
+
+# Environment (never commit keys)
+.env
+.env.*
+!.env.example
+backend/.env
+*.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Node (if using jac client)
+node_modules/
+package-lock.json
+
+# Logs
+*.log
+
+# Demo video outputs (rebuild with scripts/)
+demo-video/out/
+*.mp4
+*.webm
+
+# Jac generated
+__jac_gen__/
+
+# Misc
+*.bak
+*.tmp
+content.md
+help_past_year_repos.txt
+rules_not_to_forget.txt
